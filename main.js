@@ -64,6 +64,7 @@ class LucidiaMetaverse {
         this.createFloatingIslands();
         this.createPortals();
         this.createParticleEffects();
+        this.createSimulationTheory();
 
         // Physics for player
         const playerShape = new CANNON.Sphere(0.5);
@@ -88,6 +89,7 @@ class LucidiaMetaverse {
             document.getElementById('chat').style.display = 'block';
             document.getElementById('chat-input').style.display = 'block';
             this.addChatMessage('System', 'Welcome to Lucidia Metaverse');
+            this.addChatMessage('System', '🟢 Simulation Theory zone active — look up to find the core');
         }, 2000);
 
         // Start animation loop
@@ -344,6 +346,55 @@ class LucidiaMetaverse {
         this.scene.add(this.particles);
     }
 
+    createSimulationTheory() {
+        // Simulation core — spinning wireframe icosahedron representing the origin node
+        const coreGeo = new THREE.IcosahedronGeometry(3, 1);
+        const coreMat = new THREE.MeshStandardMaterial({
+            color: 0x00FF41,
+            emissive: 0x00FF41,
+            emissiveIntensity: 0.8,
+            wireframe: true
+        });
+        this.simulationCore = new THREE.Mesh(coreGeo, coreMat);
+        this.simulationCore.position.set(0, 18, 0);
+        this.scene.add(this.simulationCore);
+
+        // Simulation boundary — large wireframe sphere showing the limits of the simulation
+        const boundaryGeo = new THREE.SphereGeometry(10, 20, 20);
+        const boundaryMat = new THREE.MeshBasicMaterial({
+            color: 0x00FF41,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.15
+        });
+        this.simulationBoundary = new THREE.Mesh(boundaryGeo, boundaryMat);
+        this.simulationBoundary.position.set(0, 18, 0);
+        this.scene.add(this.simulationBoundary);
+
+        // Matrix rain — cascading green particles representing raw simulation data
+        const rainCount = 2000;
+        const rainGeo = new THREE.BufferGeometry();
+        const rainPositions = new Float32Array(rainCount * 3);
+        this.rainVelocities = new Float32Array(rainCount);
+
+        for (let i = 0; i < rainCount; i++) {
+            rainPositions[i * 3]     = (Math.random() - 0.5) * 200;
+            rainPositions[i * 3 + 1] = Math.random() * 80;
+            rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 200;
+            this.rainVelocities[i] = Math.random() * 10 + 5;
+        }
+
+        rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+        const rainMat = new THREE.PointsMaterial({
+            color: 0x00FF41,
+            size: 0.18,
+            transparent: true,
+            opacity: 0.75
+        });
+        this.matrixRain = new THREE.Points(rainGeo, rainMat);
+        this.scene.add(this.matrixRain);
+    }
+
     setupEventListeners() {
         // Click to enable pointer lock
         document.body.addEventListener('click', () => {
@@ -503,6 +554,28 @@ class LucidiaMetaverse {
         // Animate particles
         if (this.particles) {
             this.particles.rotation.y += 0.0005;
+        }
+
+        // Animate simulation theory elements
+        if (this.simulationCore) {
+            this.simulationCore.rotation.x += 0.01;
+            this.simulationCore.rotation.y += 0.007;
+            this.simulationBoundary.rotation.y -= 0.003;
+            this.simulationBoundary.rotation.z += 0.002;
+            const pulse = Math.sin(Date.now() * 0.001) * 0.3 + 0.7;
+            this.simulationCore.material.emissiveIntensity = pulse;
+        }
+
+        // Animate matrix rain
+        if (this.matrixRain) {
+            const positions = this.matrixRain.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length / 3; i++) {
+                positions[i * 3 + 1] -= this.rainVelocities[i] * delta;
+                if (positions[i * 3 + 1] < -5) {
+                    positions[i * 3 + 1] = 80;
+                }
+            }
+            this.matrixRain.geometry.attributes.position.needsUpdate = true;
         }
 
         // Update FPS counter

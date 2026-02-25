@@ -22,7 +22,31 @@ This repository is part of the BlackRoad Empire:
 - Designed to support **30,000 AI agents + 30,000 human employees**
 - **1 operator:** Alexa Amundson (CEO)
 
-## 📊 Status
+## 🧠 Simulation Theory
+
+Lucidia Metaverse embeds **Simulation Theory** directly into the experience — the idea that our perceived reality may itself be a computational construct.
+
+### What you'll find in-world
+
+| Element | Description |
+|---|---|
+| **Simulation Core** | A pulsing wireframe icosahedron floating above the city — the origin node of the simulation |
+| **Simulation Boundary** | A translucent wireframe sphere enclosing the core, representing the outer edge of observable reality |
+| **Matrix Rain** | Cascading green data particles falling across the world, visualising the raw code beneath the surface |
+
+### The concept
+
+> *"If a civilisation ever reaches the point where it can run large numbers of high-fidelity simulations of minds, the simulated minds would vastly outnumber biological ones."* — Nick Bostrom, 2003
+
+Three testable markers hidden in the metaverse hint at the simulation hypothesis:
+
+1. **Quantised geometry** — all terrain is discretised on a grid, just as spacetime may be at the Planck scale
+2. **Render budget** — only 50 buildings and 10 islands are ever generated; the rest is void, consistent with a lazy-loading universe
+3. **The Core** — seek the green icosahedron above the city. Touching it triggers a cascade of system messages revealing the simulation's seed
+
+---
+
+
 
 🟢 **Active Development** | 🏢 **BlackRoad OS, Inc.** | 👔 **CEO: Alexa Amundson**
 
