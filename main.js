@@ -9,13 +9,13 @@ import * as CANNON from 'cannon-es';
 class LucidiaMetaverse {
     constructor() {
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.clock = new THREE.Clock();
 
         // Physics world
         this.world = new CANNON.World();
-        this.world.gravity.set(0, -30, 0);
+        this.world.gravity.set(0, -9.81, 0);
 
         // Player
         this.player = {
@@ -23,7 +23,7 @@ class LucidiaMetaverse {
             canJump: false,
             height: 1.8,
             speed: 10,
-            jumpPower: 15
+            jumpPower: 7
         };
 
         // Controls
@@ -40,6 +40,10 @@ class LucidiaMetaverse {
         this.frameCount = 0;
         this.lastTime = performance.now();
 
+        // Animated scene objects
+        this.clouds = [];
+        this.water = null;
+
         this.init();
     }
 
@@ -53,6 +57,9 @@ class LucidiaMetaverse {
         this.renderer.toneMappingExposure = 1.0;
         document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
+        // Atmospheric fog
+        this.scene.fog = new THREE.Fog(0xb0d8f0, 150, 700);
+
         // Camera position
         this.camera.position.set(0, this.player.height, 10);
 
@@ -60,9 +67,10 @@ class LucidiaMetaverse {
         this.createSky();
         this.createLighting();
         this.createGround();
-        this.createCityscape();
-        this.createFloatingIslands();
-        this.createPortals();
+        this.createMountains();
+        this.createWater();
+        this.createTrees();
+        this.createClouds();
         this.createParticleEffects();
 
         // Physics for player
@@ -95,14 +103,14 @@ class LucidiaMetaverse {
     }
 
     createSky() {
-        // Gradient sky
-        const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+        // Realistic daytime blue sky gradient
+        const skyGeo = new THREE.SphereGeometry(800, 32, 32);
         const skyMat = new THREE.ShaderMaterial({
             uniforms: {
-                topColor: { value: new THREE.Color(0x0077ff) },
-                bottomColor: { value: new THREE.Color(0xFF006B) },
-                offset: { value: 33 },
-                exponent: { value: 0.6 }
+                topColor: { value: new THREE.Color(0x1a6ab8) },
+                bottomColor: { value: new THREE.Color(0xb8daf5) },
+                offset: { value: 10 },
+                exponent: { value: 0.4 }
             },
             vertexShader: `
                 varying vec3 vWorldPosition;
@@ -128,62 +136,56 @@ class LucidiaMetaverse {
 
         const sky = new THREE.Mesh(skyGeo, skyMat);
         this.scene.add(sky);
-
-        // Stars
-        const starsGeometry = new THREE.BufferGeometry();
-        const starsMaterial = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.1 });
-        const starsVertices = [];
-
-        for (let i = 0; i < 10000; i++) {
-            const x = (Math.random() - 0.5) * 1000;
-            const y = Math.random() * 500;
-            const z = (Math.random() - 0.5) * 1000;
-            starsVertices.push(x, y, z);
-        }
-
-        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-        const stars = new THREE.Points(starsGeometry, starsMaterial);
-        this.scene.add(stars);
     }
 
     createLighting() {
-        // Ambient light
-        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+        // Natural ambient sky light
+        const ambient = new THREE.AmbientLight(0xd6e8f0, 0.6);
         this.scene.add(ambient);
 
-        // Directional light (sun)
-        const sun = new THREE.DirectionalLight(0xFFD700, 1.5);
-        sun.position.set(50, 100, 50);
+        // Sun (warm natural directional light)
+        const sun = new THREE.DirectionalLight(0xfffbe8, 1.8);
+        sun.position.set(200, 300, 100);
         sun.castShadow = true;
-        sun.shadow.camera.left = -50;
-        sun.shadow.camera.right = 50;
-        sun.shadow.camera.top = 50;
-        sun.shadow.camera.bottom = -50;
+        sun.shadow.camera.left = -100;
+        sun.shadow.camera.right = 100;
+        sun.shadow.camera.top = 100;
+        sun.shadow.camera.bottom = -100;
         sun.shadow.mapSize.width = 2048;
         sun.shadow.mapSize.height = 2048;
         this.scene.add(sun);
 
-        // Point lights for atmosphere
-        const colors = [0xFF9D00, 0xFF6B00, 0xFF0066, 0x7700FF, 0x0066FF];
-        for (let i = 0; i < 5; i++) {
-            const light = new THREE.PointLight(colors[i], 2, 50);
-            light.position.set(
-                Math.random() * 100 - 50,
-                5,
-                Math.random() * 100 - 50
-            );
-            this.scene.add(light);
-        }
+        // Subtle sky-bounce fill light from opposite side
+        const fill = new THREE.DirectionalLight(0x88aacc, 0.3);
+        fill.position.set(-100, 50, -100);
+        this.scene.add(fill);
     }
 
     createGround() {
-        // Main ground
-        const groundGeo = new THREE.PlaneGeometry(200, 200, 50, 50);
+        // Grass terrain with gentle height variation
+        const groundGeo = new THREE.PlaneGeometry(600, 600, 150, 150);
+
+        // Sculpt hills, keep spawn area flat
+        const vertices = groundGeo.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+            const x = vertices[i];
+            const y = vertices[i + 1];
+            const distFromCenter = Math.sqrt(x * x + y * y);
+            const flattenFactor = Math.min(1.0, distFromCenter / 30);
+            vertices[i + 2] =
+                flattenFactor * (
+                    Math.sin(x * 0.05) * 3 +
+                    Math.cos(y * 0.04) * 2 +
+                    Math.sin(x * 0.02 + y * 0.03) * 5 +
+                    Math.sin(x * 0.1) * 1.2
+                );
+        }
+        groundGeo.computeVertexNormals();
+
         const groundMat = new THREE.MeshStandardMaterial({
-            color: 0x1a1a2e,
-            roughness: 0.8,
-            metalness: 0.2,
-            wireframe: false
+            color: 0x3a7d44,
+            roughness: 0.9,
+            metalness: 0.0
         });
 
         const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -197,147 +199,145 @@ class LucidiaMetaverse {
         groundBody.addShape(groundShape);
         groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
         this.world.addBody(groundBody);
-
-        // Grid overlay
-        const gridHelper = new THREE.GridHelper(200, 50, 0xFF9D00, 0xFF006B);
-        gridHelper.position.y = 0.01;
-        this.scene.add(gridHelper);
     }
 
-    createCityscape() {
-        // Create procedural buildings
-        for (let i = 0; i < 50; i++) {
-            const width = Math.random() * 3 + 2;
-            const height = Math.random() * 30 + 10;
-            const depth = Math.random() * 3 + 2;
+    createMountains() {
+        for (let i = 0; i < 24; i++) {
+            const angle = (i / 24) * Math.PI * 2 + Math.random() * 0.3;
+            const distance = 200 + Math.random() * 100;
+            const height = Math.random() * 60 + 30;
+            const radius = height * (0.5 + Math.random() * 0.3);
 
-            const buildingGeo = new THREE.BoxGeometry(width, height, depth);
-            const buildingMat = new THREE.MeshStandardMaterial({
-                color: new THREE.Color().setHSL(Math.random(), 0.5, 0.3),
-                emissive: new THREE.Color().setHSL(Math.random(), 1, 0.2),
-                emissiveIntensity: 0.3,
-                roughness: 0.7,
-                metalness: 0.5
+            const mtnGeo = new THREE.ConeGeometry(radius, height, 7 + Math.floor(Math.random() * 4));
+            const mtnMat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color().setHSL(0.05 + Math.random() * 0.05, 0.15, 0.3 + Math.random() * 0.2),
+                roughness: 0.95
             });
 
-            const building = new THREE.Mesh(buildingGeo, buildingMat);
-
-            // Random position in a circle around spawn
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * 40 + 30;
-            building.position.set(
+            const mountain = new THREE.Mesh(mtnGeo, mtnMat);
+            mountain.position.set(
                 Math.cos(angle) * distance,
-                height / 2,
+                height / 2 - 5,
                 Math.sin(angle) * distance
             );
+            mountain.castShadow = true;
+            this.scene.add(mountain);
 
-            building.castShadow = true;
-            building.receiveShadow = true;
-            this.scene.add(building);
-
-            // Windows
-            for (let j = 0; j < Math.floor(height / 3); j++) {
-                const windowGeo = new THREE.PlaneGeometry(width * 0.8, 2);
-                const windowMat = new THREE.MeshBasicMaterial({
-                    color: Math.random() > 0.7 ? 0xFFFF00 : 0x333333
-                });
-                const window1 = new THREE.Mesh(windowGeo, windowMat);
-                window1.position.copy(building.position);
-                window1.position.y = j * 3 + 2;
-                window1.position.z += depth / 2 + 0.01;
-                this.scene.add(window1);
+            // Snow cap on tall peaks
+            if (height > 60) {
+                const snowGeo = new THREE.ConeGeometry(radius * 0.25, height * 0.2, 7);
+                const snowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
+                const snow = new THREE.Mesh(snowGeo, snowMat);
+                snow.position.set(
+                    mountain.position.x,
+                    mountain.position.y + height * 0.4,
+                    mountain.position.z
+                );
+                this.scene.add(snow);
             }
         }
     }
 
-    createFloatingIslands() {
-        // Floating platforms
-        for (let i = 0; i < 10; i++) {
-            const islandGeo = new THREE.CylinderGeometry(5, 3, 2, 8);
-            const islandMat = new THREE.MeshStandardMaterial({
-                color: 0x8B4513,
-                roughness: 0.9
-            });
+    createWater() {
+        const waterGeo = new THREE.PlaneGeometry(600, 600);
+        const waterMat = new THREE.MeshStandardMaterial({
+            color: 0x006994,
+            transparent: true,
+            opacity: 0.75,
+            roughness: 0.05,
+            metalness: 0.1
+        });
+        this.water = new THREE.Mesh(waterGeo, waterMat);
+        this.water.rotation.x = -Math.PI / 2;
+        this.water.position.y = -2.5;
+        this.scene.add(this.water);
+    }
 
-            const island = new THREE.Mesh(islandGeo, islandMat);
-            island.position.set(
-                Math.random() * 100 - 50,
-                Math.random() * 30 + 20,
-                Math.random() * 100 - 50
-            );
-            island.castShadow = true;
-            island.receiveShadow = true;
-            this.scene.add(island);
+    createTrees() {
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a2f0a, roughness: 0.95 });
+        const foliageMats = [
+            new THREE.MeshStandardMaterial({ color: 0x2d6b22, roughness: 0.8 }),
+            new THREE.MeshStandardMaterial({ color: 0x3d8a2f, roughness: 0.8 }),
+            new THREE.MeshStandardMaterial({ color: 0x1f5218, roughness: 0.8 })
+        ];
 
-            // Glowing crystal on top
-            const crystalGeo = new THREE.OctahedronGeometry(1);
-            const crystalMat = new THREE.MeshStandardMaterial({
-                color: 0xFF00FF,
-                emissive: 0xFF00FF,
-                emissiveIntensity: 1
-            });
-            const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-            crystal.position.copy(island.position);
-            crystal.position.y += 2;
-            this.scene.add(crystal);
+        for (let i = 0; i < 300; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * 200 + 15;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            const trunkHeight = Math.random() * 4 + 3;
+
+            const trunkGeo = new THREE.CylinderGeometry(0.15, 0.25, trunkHeight, 6);
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.set(x, trunkHeight / 2, z);
+            trunk.castShadow = true;
+            this.scene.add(trunk);
+
+            // Three layered foliage cones
+            for (let j = 0; j < 3; j++) {
+                const layerRadius = 2.5 - j * 0.5 + Math.random() * 0.5;
+                const foliageGeo = new THREE.ConeGeometry(layerRadius, 2.5, 7);
+                const foliage = new THREE.Mesh(foliageGeo, foliageMats[j % foliageMats.length]);
+                foliage.position.set(x, trunkHeight + j * 1.2 + 0.5, z);
+                foliage.castShadow = true;
+                this.scene.add(foliage);
+            }
         }
     }
 
-    createPortals() {
-        // Create portal rings
-        const portalPositions = [
-            { x: 20, y: 5, z: 0 },
-            { x: -20, y: 5, z: 0 },
-            { x: 0, y: 5, z: 20 },
-            { x: 0, y: 5, z: -20 }
-        ];
-
-        portalPositions.forEach(pos => {
-            const ringGeo = new THREE.TorusGeometry(3, 0.2, 16, 100);
-            const ringMat = new THREE.MeshStandardMaterial({
-                color: 0x00FFFF,
-                emissive: 0x00FFFF,
-                emissiveIntensity: 2,
-                metalness: 1
-            });
-
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.set(pos.x, pos.y, pos.z);
-            this.scene.add(ring);
-
-            // Portal surface
-            const portalGeo = new THREE.CircleGeometry(2.8, 32);
-            const portalMat = new THREE.MeshBasicMaterial({
-                color: 0x0066FF,
-                transparent: true,
-                opacity: 0.5,
-                side: THREE.DoubleSide
-            });
-            const portal = new THREE.Mesh(portalGeo, portalMat);
-            portal.position.copy(ring.position);
-            this.scene.add(portal);
+    createClouds() {
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.88,
+            roughness: 1
         });
+
+        for (let i = 0; i < 25; i++) {
+            const cloudGroup = new THREE.Group();
+            const puffs = Math.floor(Math.random() * 5) + 4;
+
+            for (let j = 0; j < puffs; j++) {
+                const puffGeo = new THREE.SphereGeometry(Math.random() * 8 + 5, 7, 5);
+                const puff = new THREE.Mesh(puffGeo, cloudMat);
+                puff.position.set(
+                    (Math.random() - 0.5) * 25,
+                    (Math.random() - 0.5) * 5,
+                    (Math.random() - 0.5) * 12
+                );
+                cloudGroup.add(puff);
+            }
+
+            cloudGroup.position.set(
+                (Math.random() - 0.5) * 500,
+                Math.random() * 60 + 80,
+                (Math.random() - 0.5) * 500
+            );
+            this.scene.add(cloudGroup);
+            this.clouds.push(cloudGroup);
+        }
     }
 
     createParticleEffects() {
-        // Floating particles
-        const particleCount = 1000;
+        // Natural floating dust / pollen particles
+        const particleCount = 500;
         const particlesGeometry = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(particleCount * 3);
 
         for (let i = 0; i < particleCount * 3; i += 3) {
-            particlePositions[i] = (Math.random() - 0.5) * 100;
-            particlePositions[i + 1] = Math.random() * 50;
-            particlePositions[i + 2] = (Math.random() - 0.5) * 100;
+            particlePositions[i] = (Math.random() - 0.5) * 60;
+            particlePositions[i + 1] = Math.random() * 20 + 1;
+            particlePositions[i + 2] = (Math.random() - 0.5) * 60;
         }
 
         particlesGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
 
         const particlesMaterial = new THREE.PointsMaterial({
-            color: 0xFF9D00,
-            size: 0.1,
+            color: 0xfffacd,
+            size: 0.08,
             transparent: true,
-            opacity: 0.6
+            opacity: 0.5
         });
 
         this.particles = new THREE.Points(particlesGeometry, particlesMaterial);
@@ -500,9 +500,20 @@ class LucidiaMetaverse {
             this.updateMovement(delta);
         }
 
-        // Animate particles
+        // Drift clouds slowly
+        this.clouds.forEach(cloud => {
+            cloud.position.x += 0.02;
+            if (cloud.position.x > 250) cloud.position.x = -250;
+        });
+
+        // Gently bob water surface
+        if (this.water) {
+            this.water.position.y = -2.5 + Math.sin(this.clock.elapsedTime * 0.4) * 0.1;
+        }
+
+        // Animate pollen particles
         if (this.particles) {
-            this.particles.rotation.y += 0.0005;
+            this.particles.rotation.y += 0.0002;
         }
 
         // Update FPS counter
